@@ -4,16 +4,11 @@ namespace Wit.Bot.Framework.Builder.Attributes
 {
     [Serializable]
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
-    public class WitMerge : Attribute
+    public class WitMergeAttribute : Attribute
     {
         public string Name { get; set; }
-
-        public WitMerge()
-        {
-            
-        }
-
-        public WitMerge(string name)
+        
+        public WitMergeAttribute(string name)
         {
             Name = name;
         }

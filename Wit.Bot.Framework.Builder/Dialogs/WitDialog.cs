@@ -29,11 +29,8 @@ namespace Wit.Bot.Framework.Builder.Dialogs
         protected readonly IWitService Service;
 
         [NonSerialized]
-        protected Dictionary<string, ActionActivityHandler> HandlerByAction;
-
-        [NonSerialized]
         protected Dictionary<string, ActionActivityHandlerInfo> HandlerInfoByAction;
-        
+
         private bool _resetRequested;
 
         public IWitService MakeServiceFromAttributes()
@@ -89,7 +86,7 @@ namespace Wit.Bot.Framework.Builder.Dialogs
 
                 var result = await Service.QueryAsync(messageText, WitSessionId, jsonContext, context.CancellationToken);
 
-                messageText = null; // reset query for next calls
+                messageText = null; // reset query for subsequent calls as it is not recommended by wit.ai to send it again
 
                 Debug.WriteLine("Result:");
                 Debug.WriteLine(new JavaScriptSerializer().Serialize(result));
@@ -113,13 +110,11 @@ namespace Wit.Bot.Framework.Builder.Dialogs
 
                     case "stop":
                         Debug.WriteLine("STOP");
-                        
+
                         if (_resetRequested)
-                        {
                             await ResetConversation(context);
 
-                            _resetRequested = false;
-                        }
+                        _resetRequested = false;
 
                         break;
 
@@ -140,26 +135,60 @@ namespace Wit.Bot.Framework.Builder.Dialogs
 
             return Task.CompletedTask;
         }
-        
+
         protected virtual async Task DispatchToActionHandler(IDialogContext context, IAwaitable<IMessageActivity> item, WitResult result)
         {
-            if (HandlerByAction == null)
-                HandlerByAction = new Dictionary<string, ActionActivityHandler>(GetHandlersByAction());
+            if (HandlerInfoByAction == null)
+                HandlerInfoByAction = new Dictionary<string, ActionActivityHandlerInfo>(GetHandlersInfoByAction());
 
-            ActionActivityHandler handler;
+            ActionActivityHandlerInfo handlerInfo;
 
-            if (string.IsNullOrEmpty(result.Action) || !HandlerByAction.TryGetValue(result.Action, out handler))
-                handler = HandlerByAction[string.Empty];
+            if (string.IsNullOrEmpty(result.Action) || !HandlerInfoByAction.TryGetValue(result.Action, out handlerInfo))
+                handlerInfo = HandlerInfoByAction[string.Empty];
 
-            if (handler != null)
-                await handler(context, item, result);
+            if (handlerInfo != null)
+            {
+                // check if action is tagged with WitReset attribute
+                if (handlerInfo.WitReset)
+                    _resetRequested = true;
+
+                // merge all or selected results to wit context
+                if ((handlerInfo.MergeAll || handlerInfo.WitMerges.Any()) && result.Entities != null)
+                {
+                    var entitiesToMerge = result.Entities.Where(e => e.Key != "intent" && (handlerInfo.MergeAll || handlerInfo.WitMerges.Select(s => s.Name).Contains(e.Key)));
+
+                    foreach (var entity in entitiesToMerge)
+                        WitContext[entity.Key] = entity.Value.FirstOrDefault()?.Value;
+                }
+
+                // check if all required entities are in context
+                var call = true;
+
+                foreach (var entity in handlerInfo.WitEntities)
+                {
+                    if (!WitContext.ContainsKey(entity.Name))
+                    {
+                        WitContext[$"{entity.Name}Missing"] = true;
+
+                        call = false;
+
+                        break;
+                    }
+
+                    WitContext.Remove($"{entity.Name}Missing");
+                }
+
+                // ...and finally, when all entities are present in context - make a call
+                if (call)
+                    await handlerInfo.Handler(context, item, result);
+            }
             else
                 throw new System.Exception("No default action handler found.");
         }
 
-        protected virtual IDictionary<string, ActionActivityHandler> GetHandlersByAction()
+        protected virtual IDictionary<string, ActionActivityHandlerInfo> GetHandlersInfoByAction()
         {
-            return WitDialog.EnumerateHandlers(this).ToDictionary(kv => kv.Key, kv => kv.Value);
+            return WitDialog.EnumerateHandlersInfo(this).ToDictionary(kv => kv.Key, kv => kv.Value);
         }
 
         protected virtual Task<string> GetWitQueryTextAsync(IDialogContext context, IMessageActivity message)
@@ -175,13 +204,25 @@ namespace Wit.Bot.Framework.Builder.Dialogs
 
     internal static class WitDialog
     {
-        public static IEnumerable<KeyValuePair<string, ActionActivityHandler>> EnumerateHandlers(object dialog)
+        public static IEnumerable<KeyValuePair<string, ActionActivityHandlerInfo>> EnumerateHandlersInfo(object dialog)
         {
             var methods = dialog.GetType().GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
             foreach (var method in methods)
             {
                 var actions = method.GetCustomAttributes<WitActionAttribute>(true).ToArray();
+                var entities = method.GetCustomAttributes<WitEntityAttribute>(true).ToArray();
+                var reset = method.GetCustomAttributes<WitResetAttribute>(true).Any();
+                var merges = method.GetCustomAttributes<WitMergeAttribute>(true).ToList();
+                var mergeAll = method.GetCustomAttributes<WitMergeAllAttribute>(true).Any();
+                
+                var handlerInfo = new ActionActivityHandlerInfo()
+                {
+                    MergeAll = mergeAll,
+                    WitMerges = merges.ToArray(),
+                    WitReset = reset,
+                    WitEntities = entities.ToArray()
+                };
 
                 ActionActivityHandler actionHandler = null;
 
@@ -219,10 +260,12 @@ namespace Wit.Bot.Framework.Builder.Dialogs
 
                 if (actionHandler != null)
                 {
+                    handlerInfo.Handler = actionHandler;
+
                     var actionNames = actions.Select(i => i.ActionName).DefaultIfEmpty(method.Name);
 
                     foreach (var actionName in actionNames)
-                        yield return new KeyValuePair<string, ActionActivityHandler>(actionName, actionHandler);
+                        yield return new KeyValuePair<string, ActionActivityHandlerInfo>(actionName, handlerInfo);
                 }
                 else
                 {

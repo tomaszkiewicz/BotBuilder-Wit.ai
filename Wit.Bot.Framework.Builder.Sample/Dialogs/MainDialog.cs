@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Connector;
@@ -14,59 +13,24 @@ namespace Wit.Bot.Framework.Builder.Sample.Dialogs
     public class MainDialog : WitDialog<object>
     {
         [WitAction("greetings")]
-        public Task Greetings(IDialogContext context, IAwaitable<IMessageActivity> message, WitResult witResult)
+        public async Task Greetings(IDialogContext context, IAwaitable<IMessageActivity> message, WitResult witResult)
         {
-            WitContext["user"] = "John";
-
-            return Task.CompletedTask;
-        }
-
-        public void Merge(WitResult result)
-        {
-            if (result.Entities == null)
-                return;
-
-            foreach (var entity in result.Entities.Where(e => e.Key != "intent"))
-                WitContext[entity.Key] = entity.Value.FirstOrDefault()?.Value;
-        }
-
-        public bool ValidateWitContextKey(string key, string errorKey)
-        {
-            if (!WitContext.ContainsKey(key))
-            {
-                WitContext[errorKey] = true;
-
-                return false;
-            }
-
-            WitContext.Remove(errorKey);
-
-            return true;
+            WitContext["user"] = (await message).From.Name;
         }
 
         [WitAction("getForecast")]
         [WitEntity("location")]
         [WitEntity("datetime")]
-        [WitMerge]
+        [WitMergeAll]
         public async Task GetForecast(IDialogContext context, IAwaitable<IMessageActivity> message, WitResult witResult)
         {
-            Merge(witResult);
-
-            if (!ValidateWitContextKey("location", "missingLocation"))
-                return;
-
-            if (!ValidateWitContextKey("datetime", "missingDatetime"))
-                return;
-
-            WitContext["forecast"] = "Sunny";
+            WitContext["forecast"] = "sunny";
         }
 
         [WitAction("reset")]
         [WitReset]
         public Task Reset(IDialogContext context, IAwaitable<IMessageActivity> message, WitResult witResult)
         {
-            RequestReset();
-
             return Task.CompletedTask;
         }
     }

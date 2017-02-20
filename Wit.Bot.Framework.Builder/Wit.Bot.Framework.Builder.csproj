@@ -90,8 +90,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Attributes\WitEntityAttribute.cs" />
-    <Compile Include="Attributes\WitMerge.cs" />
-    <Compile Include="Attributes\WitReset.cs" />
+    <Compile Include="Attributes\WitMergeAllAttribute.cs" />
+    <Compile Include="Attributes\WitMergeAttribute.cs" />
+    <Compile Include="Attributes\WitResetAttribute.cs" />
     <Compile Include="Extensions\DialogContextExtensions.cs" />
     <Compile Include="Extensions\WitServiceExtensions.cs" />
     <Compile Include="Handlers\ActionActivityHandler.cs" />
