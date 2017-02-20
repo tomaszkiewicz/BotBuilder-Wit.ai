@@ -10,7 +10,9 @@ using Microsoft.Bot.Builder.Internals.Fibers;
 using Microsoft.Bot.Connector;
 using Wit.Bot.Framework.Builder.Attributes;
 using Wit.Bot.Framework.Builder.Exception;
+using Wit.Bot.Framework.Builder.Extensions;
 using Wit.Bot.Framework.Builder.Handlers;
+using Wit.Bot.Framework.Builder.Interfaces;
 
 namespace Wit.Bot.Framework.Builder.Dialogs
 {
@@ -63,34 +65,41 @@ namespace Wit.Bot.Framework.Builder.Dialogs
 
         private async Task MessageHandler(IDialogContext context, IAwaitable<IMessageActivity> item)
         {
-            context.PrivateConversationData.SetValue(WitContextKey, WitContext);
-            context.PrivateConversationData.SetValue(WitSessionIdKey, WitSessionId);
-
-            var message = await item;
-            var messageText = await GetWitQueryTextAsync(context, message);
-
-            var jsonContext = new JavaScriptSerializer().Serialize(WitContext);
-
-            var result = await Service.QueryAsync(messageText, WitSessionId, jsonContext, context.CancellationToken);
-
-            switch (result.Type)
+            while (true)
             {
-                case "action":
-                    await DispatchToActionHandler(context, item, result);
-                    await MessageHandler(context, item);
-                    break;
+                context.PrivateConversationData.SetValue(WitContextKey, WitContext);
+                context.PrivateConversationData.SetValue(WitSessionIdKey, WitSessionId);
 
-                case "msg":
-                    await context.PostAsync(result.Message);
-                    await MessageHandler(context, item);
-                    break;
+                var message = await item;
+                var messageText = await GetWitQueryTextAsync(context, message);
 
-                case "stop":
-                    await ResetConversation(context);
-                    break;
+                var jsonContext = new JavaScriptSerializer().Serialize(WitContext);
 
-                default:
-                    throw new UnsupportedWitActionException($"Action {result.Type} is not supported");
+                var result = await Service.QueryAsync(messageText, WitSessionId, jsonContext, context.CancellationToken);
+
+                switch (result.Type)
+                {
+                    case "action":
+                        await DispatchToActionHandler(context, item, result);
+                        continue;
+
+                    case "msg":
+                        if (result.QuickReplies != null && result.QuickReplies.Any())
+                            await context.PostQuickRepliesAsync(result.QuickReplies, message: result.Message);
+                        else
+                            await context.PostAsync(result.Message);
+
+                        continue;
+
+                    case "stop":
+                        await ResetConversation(context);
+                        break;
+
+                    default:
+                        throw new UnsupportedWitActionException($"Action {result.Type} is not supported");
+                }
+
+                break;
             }
         }
 

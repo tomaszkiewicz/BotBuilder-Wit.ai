@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Microsoft.Bot.Builder.Internals.Fibers;
+using Wit.Bot.Framework.Builder.Interfaces;
 
 namespace Wit.Bot.Framework.Builder
 {

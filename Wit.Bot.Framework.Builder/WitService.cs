@@ -2,74 +2,20 @@
 using Microsoft.Rest;
 using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Wit.Bot.Framework.Builder.Interfaces;
 using Wit.Bot.Framework.Builder.Models;
 
 namespace Wit.Bot.Framework.Builder
 {
-    public sealed class WitRequest
-    {
-        public readonly string Query;
-
-        public readonly string SessionId;
-
-        public readonly string Context;
-
-        public WitRequest(string query,
-            string sessionId, string context = default(string))
-        {
-            Query = query;
-            SessionId = sessionId;
-            Context = context;
-        }
-
-        /// <summary>
-        /// Build the Uri for issuing the request for the specified wit model.
-        /// </summary>
-        /// <param name="model"> The wit model.</param>
-        /// <returns> The request Uri.</returns>
-        public Uri BuildUri(IWitModel model)
-        {
-            if (SessionId == null)
-            {
-                throw new ValidationException(ValidationRules.CannotBeNull, "session id");
-            }
-
-            var queryParameters = new List<string>();
-            queryParameters.Add($"session_id={Uri.EscapeDataString(SessionId)}");
-            queryParameters.Add($"q={Uri.EscapeDataString(Query)}");
-            UriBuilder builder;
-
-            switch (model.ApiVersion)
-            {
-                case WitApiVersion.Standard:
-                    builder = new UriBuilder(model.UriBase);
-                    break;
-                default:
-                    throw new ArgumentException($"{model.ApiVersion} is not a valid Wit api version.");
-            }
-
-            builder.Query = string.Join("&", queryParameters);
-            return builder.Uri;
-        }
-    }
-
-    public interface IWitService
-    {
-        HttpRequestMessage BuildRequest(WitRequest witRequest);
-
-        Task<WitResult> QueryAsync(HttpRequestMessage request, CancellationToken token);
-    }
-
     [Serializable]
     public sealed class WitService : IWitService
     {
-        private readonly IWitModel model;
+        private readonly IWitModel _model;
 
         /// <summary>
         /// Construct the wit service using the model information.
@@ -77,22 +23,20 @@ namespace Wit.Bot.Framework.Builder
         /// <param name="model">The wit model information.</param>
         public WitService(IWitModel model)
         {
-            SetField.NotNull(out this.model, nameof(model), model);
+            SetField.NotNull(out _model, nameof(model), model);
         }
 
         public HttpRequestMessage BuildRequest(WitRequest witRequest)
         {
-            Uri uri = witRequest.BuildUri(model);
+            var uri = witRequest.BuildUri(_model);
+
             return BuildRequest(uri, witRequest);
         }
 
         private HttpRequestMessage BuildRequest(Uri uri, WitRequest witRequest)
         {
-
-            if (model.AuthToken == null)
-            {
+            if (_model.AuthToken == null)
                 throw new ValidationException(ValidationRules.CannotBeNull, "Authorization Token");
-            }
 
             var request = new HttpRequestMessage()
             {
@@ -101,7 +45,7 @@ namespace Wit.Bot.Framework.Builder
             };
 
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", model.AuthToken);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _model.AuthToken);
             request.Content = new StringContent(witRequest.Context, Encoding.UTF8, "application/json");
 
             return request;
@@ -109,42 +53,24 @@ namespace Wit.Bot.Framework.Builder
 
         public async Task<WitResult> QueryAsync(HttpRequestMessage request, CancellationToken token)
         {
-            string json = string.Empty;
-
             using (var client = new HttpClient())
             {
-                var task = client.SendAsync(request)
-                    .ContinueWith((taskwithmsg) =>
-                    {
-                        var response = taskwithmsg.Result;
+                var response = await client.SendAsync(request, token);
 
-                        var jsonTask = response.Content.ReadAsStringAsync();
-                        jsonTask.Wait();
-                        json = jsonTask.Result;
-                    });
-                task.Wait();
-            }
+                var json = await response.Content.ReadAsStringAsync();
+                
+                try
+                {
+                    var result = JsonConvert.DeserializeObject<WitResult>(json);
+                    //might need to add wiring based on action type here?
 
-            try
-            {
-                var result = JsonConvert.DeserializeObject<WitResult>(json);
-                //might need to add wiring based on action type here?
-                return result;
+                    return result;
+                }
+                catch (JsonException ex)
+                {
+                    throw new ArgumentException("Unable to deserialize the Wit response", ex);
+                }
             }
-            catch (JsonException ex)
-            {
-                throw new ArgumentException("Unable to deserialize the Wit response.", ex);
-            }
-        }
-    }
-
-    public static partial class Extensions
-    {
-        public static async Task<WitResult> QueryAsync(this IWitService service, string text, string sessionId, string context, CancellationToken token)
-        {
-            var request = service.BuildRequest(new WitRequest(text, sessionId, context));
-            return await service.QueryAsync(request, token);
         }
     }
 }
-
