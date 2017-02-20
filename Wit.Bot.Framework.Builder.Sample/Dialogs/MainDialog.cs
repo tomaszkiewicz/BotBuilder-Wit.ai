@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Connector;
@@ -20,24 +21,53 @@ namespace Wit.Bot.Framework.Builder.Sample.Dialogs
             return Task.CompletedTask;
         }
 
+        public void Merge(WitResult result)
+        {
+            if (result.Entities == null)
+                return;
+
+            foreach (var entity in result.Entities.Where(e => e.Key != "intent"))
+                WitContext[entity.Key] = entity.Value.FirstOrDefault()?.Value;
+        }
+
+        public bool ValidateWitContextKey(string key, string errorKey)
+        {
+            if (!WitContext.ContainsKey(key))
+            {
+                WitContext[errorKey] = true;
+
+                return false;
+            }
+
+            WitContext.Remove(errorKey);
+
+            return true;
+        }
+
         [WitAction("getForecast")]
+        [WitEntity("location")]
+        [WitEntity("datetime")]
+        [WitMerge]
         public async Task GetForecast(IDialogContext context, IAwaitable<IMessageActivity> message, WitResult witResult)
         {
-            if (!witResult.Entities.ContainsKey("location"))
-            {
-                WitContext["missingLocation"] = true;
+            Merge(witResult);
 
+            if (!ValidateWitContextKey("location", "missingLocation"))
                 return;
-            }
 
-            if (!witResult.Entities.ContainsKey("datetime"))
-            {
-                WitContext["missingDate"] = true;
-
+            if (!ValidateWitContextKey("datetime", "missingDatetime"))
                 return;
-            }
 
             WitContext["forecast"] = "Sunny";
+        }
+
+        [WitAction("reset")]
+        [WitReset]
+        public Task Reset(IDialogContext context, IAwaitable<IMessageActivity> message, WitResult witResult)
+        {
+            RequestReset();
+
+            return Task.CompletedTask;
         }
     }
 }

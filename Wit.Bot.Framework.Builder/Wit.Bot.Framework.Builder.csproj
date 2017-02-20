@@ -89,9 +89,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Attributes\WitEntityAttribute.cs" />
+    <Compile Include="Attributes\WitMerge.cs" />
+    <Compile Include="Attributes\WitReset.cs" />
     <Compile Include="Extensions\DialogContextExtensions.cs" />
     <Compile Include="Extensions\WitServiceExtensions.cs" />
     <Compile Include="Handlers\ActionActivityHandler.cs" />
+    <Compile Include="Handlers\ActionActivityHandlerInfo.cs" />
     <Compile Include="Handlers\ActionHandler.cs" />
     <Compile Include="Exception\UnsupportedWitActionException.cs" />
     <Compile Include="Attributes\WitActionAttribute.cs" />

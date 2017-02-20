@@ -30,9 +30,11 @@ namespace Wit.Bot.Framework.Builder
 
             var queryParameters = new List<string>
             {
-                $"session_id={Uri.EscapeDataString(SessionId)}",
-                $"q={Uri.EscapeDataString(Query)}"
+                $"session_id={Uri.EscapeDataString(SessionId)}"
             };
+
+            if (!string.IsNullOrWhiteSpace(Query))
+                queryParameters.Add($"q={Uri.EscapeDataString(Query)}");
 
             UriBuilder builder;
 

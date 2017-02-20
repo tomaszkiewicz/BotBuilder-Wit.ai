@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Reflection;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using Wit.Bot.Framework.Builder.Models;
 using System.Linq;
@@ -19,16 +20,21 @@ namespace Wit.Bot.Framework.Builder.Dialogs
     [Serializable]
     public class WitDialog<TResult> : IDialog<TResult>
     {
-        private const string WitSessionIdKey = "witSessionId";
-        private const string WitContextKey = "witContext";
+        protected const string WitSessionIdKey = "witSessionId";
+        protected const string WitContextKey = "witContext";
 
-        public IDictionary<string, object> WitContext;
+        public Dictionary<string, object> WitContext;
         public string WitSessionId;
 
         protected readonly IWitService Service;
 
         [NonSerialized]
         protected Dictionary<string, ActionActivityHandler> HandlerByAction;
+
+        [NonSerialized]
+        protected Dictionary<string, ActionActivityHandlerInfo> HandlerInfoByAction;
+        
+        private bool _resetRequested;
 
         public IWitService MakeServiceFromAttributes()
         {
@@ -57,7 +63,7 @@ namespace Wit.Bot.Framework.Builder.Dialogs
             if (!context.PrivateConversationData.ContainsKey(WitSessionIdKey))
                 await ResetConversation(context);
 
-            WitContext = context.PrivateConversationData.Get<IDictionary<string, object>>(WitContextKey);
+            WitContext = context.PrivateConversationData.Get<Dictionary<string, object>>(WitContextKey);
             WitSessionId = context.PrivateConversationData.Get<string>(WitSessionIdKey);
 
             await MessageHandler(context, item);
@@ -65,25 +71,39 @@ namespace Wit.Bot.Framework.Builder.Dialogs
 
         private async Task MessageHandler(IDialogContext context, IAwaitable<IMessageActivity> item)
         {
+            var message = await item;
+            var messageText = await GetWitQueryTextAsync(context, message);
+
             while (true)
             {
                 context.PrivateConversationData.SetValue(WitContextKey, WitContext);
                 context.PrivateConversationData.SetValue(WitSessionIdKey, WitSessionId);
 
-                var message = await item;
-                var messageText = await GetWitQueryTextAsync(context, message);
-
                 var jsonContext = new JavaScriptSerializer().Serialize(WitContext);
 
+                Debug.WriteLine("******************************************************************************");
+                Debug.WriteLine($"Session Id: {WitSessionId}");
+                Debug.WriteLine($"Message: {messageText}");
+                Debug.WriteLine("Context:");
+                Debug.WriteLine(jsonContext);
+
                 var result = await Service.QueryAsync(messageText, WitSessionId, jsonContext, context.CancellationToken);
+
+                messageText = null; // reset query for next calls
+
+                Debug.WriteLine("Result:");
+                Debug.WriteLine(new JavaScriptSerializer().Serialize(result));
 
                 switch (result.Type)
                 {
                     case "action":
+                        Debug.WriteLine($"ACTION {result.Action}");
                         await DispatchToActionHandler(context, item, result);
                         continue;
 
                     case "msg":
+                        Debug.WriteLine($"SAY: {result.Message}");
+
                         if (result.QuickReplies != null && result.QuickReplies.Any())
                             await context.PostQuickRepliesAsync(result.QuickReplies, message: result.Message);
                         else
@@ -92,7 +112,15 @@ namespace Wit.Bot.Framework.Builder.Dialogs
                         continue;
 
                     case "stop":
-                        await ResetConversation(context);
+                        Debug.WriteLine("STOP");
+                        
+                        if (_resetRequested)
+                        {
+                            await ResetConversation(context);
+
+                            _resetRequested = false;
+                        }
+
                         break;
 
                     default:
@@ -105,12 +133,14 @@ namespace Wit.Bot.Framework.Builder.Dialogs
 
         private static Task ResetConversation(IDialogContext context)
         {
+            Debug.WriteLine("RESET");
+
             context.PrivateConversationData.SetValue<IDictionary<string, object>>(WitContextKey, new Dictionary<string, object>());
             context.PrivateConversationData.SetValue(WitSessionIdKey, Guid.NewGuid().ToString());
 
             return Task.CompletedTask;
         }
-
+        
         protected virtual async Task DispatchToActionHandler(IDialogContext context, IAwaitable<IMessageActivity> item, WitResult result)
         {
             if (HandlerByAction == null)
@@ -135,6 +165,11 @@ namespace Wit.Bot.Framework.Builder.Dialogs
         protected virtual Task<string> GetWitQueryTextAsync(IDialogContext context, IMessageActivity message)
         {
             return Task.FromResult(message.Text);
+        }
+
+        protected void RequestReset()
+        {
+            _resetRequested = true;
         }
     }
 
