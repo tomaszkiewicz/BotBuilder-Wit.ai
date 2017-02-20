@@ -23,9 +23,9 @@ namespace Wit.Bot.Framework.Builder
         public WitRequest(string query,
             string sessionId, string context = default(string))
         {
-            this.Query = query;
-            this.SessionId = sessionId;
-            this.Context = context;
+            Query = query;
+            SessionId = sessionId;
+            Context = context;
         }
 
         /// <summary>
@@ -82,14 +82,14 @@ namespace Wit.Bot.Framework.Builder
 
         public HttpRequestMessage BuildRequest(WitRequest witRequest)
         {
-            Uri uri = witRequest.BuildUri(this.model);
-            return this.BuildRequest(uri, witRequest);
+            Uri uri = witRequest.BuildUri(model);
+            return BuildRequest(uri, witRequest);
         }
 
         private HttpRequestMessage BuildRequest(Uri uri, WitRequest witRequest)
         {
 
-            if (this.model.AuthToken == null)
+            if (model.AuthToken == null)
             {
                 throw new ValidationException(ValidationRules.CannotBeNull, "Authorization Token");
             }
@@ -101,7 +101,7 @@ namespace Wit.Bot.Framework.Builder
             };
 
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", this.model.AuthToken);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", model.AuthToken);
             request.Content = new StringContent(witRequest.Context, Encoding.UTF8, "application/json");
 
             return request;

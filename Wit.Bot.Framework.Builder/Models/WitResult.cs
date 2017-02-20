@@ -9,7 +9,7 @@ namespace Wit.Bot.Framework.Builder.Models
         public string Type { get; set; }
 
         [JsonProperty(PropertyName = "msg")]
-        public string message { get; set; }
+        public string Message { get; set; }
 
         [JsonProperty(PropertyName = "confidence")]
         public float Confidence { get; set; }
@@ -22,7 +22,5 @@ namespace Wit.Bot.Framework.Builder.Models
 
         [JsonProperty(PropertyName = "entities")]
         public Dictionary<string, IList<WitEntity>> Entities { get; set; }
-
-
     }
 }
