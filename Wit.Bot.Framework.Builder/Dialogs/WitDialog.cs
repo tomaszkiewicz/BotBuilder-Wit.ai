@@ -164,7 +164,7 @@ namespace Wit.Bot.Framework.Builder.Dialogs
                 // check if all required entities are in context
                 var call = true;
 
-                foreach (var entity in handlerInfo.WitEntities)
+                foreach (var entity in handlerInfo.WitRequireEntities)
                 {
                     if (!WitContext.ContainsKey(entity.Name))
                     {
@@ -195,11 +195,6 @@ namespace Wit.Bot.Framework.Builder.Dialogs
         {
             return Task.FromResult(message.Text);
         }
-
-        protected void RequestReset()
-        {
-            _resetRequested = true;
-        }
     }
 
     internal static class WitDialog
@@ -211,7 +206,7 @@ namespace Wit.Bot.Framework.Builder.Dialogs
             foreach (var method in methods)
             {
                 var actions = method.GetCustomAttributes<WitActionAttribute>(true).ToArray();
-                var entities = method.GetCustomAttributes<WitEntityAttribute>(true).ToArray();
+                var entities = method.GetCustomAttributes<WitRequireEntityAttribute>(true).ToArray();
                 var reset = method.GetCustomAttributes<WitResetAttribute>(true).Any();
                 var merges = method.GetCustomAttributes<WitMergeAttribute>(true).ToList();
                 var mergeAll = method.GetCustomAttributes<WitMergeAllAttribute>(true).Any();
@@ -221,7 +216,7 @@ namespace Wit.Bot.Framework.Builder.Dialogs
                     MergeAll = mergeAll,
                     WitMerges = merges.ToArray(),
                     WitReset = reset,
-                    WitEntities = entities.ToArray()
+                    WitRequireEntities = entities.ToArray()
                 };
 
                 ActionActivityHandler actionHandler = null;

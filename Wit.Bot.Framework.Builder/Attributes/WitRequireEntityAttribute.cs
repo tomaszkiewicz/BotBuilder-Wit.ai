@@ -4,11 +4,11 @@ namespace Wit.Bot.Framework.Builder.Attributes
 {
     [Serializable]
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
-    public class WitEntityAttribute : Attribute
+    public class WitRequireEntityAttribute : Attribute
     {
         public string Name { get; set; }
 
-        public WitEntityAttribute(string name)
+        public WitRequireEntityAttribute(string name)
         {
             Name = name;
         }

@@ -19,8 +19,8 @@ namespace Wit.Bot.Framework.Builder.Sample.Dialogs
         }
 
         [WitAction("getForecast")]
-        [WitEntity("location")]
-        [WitEntity("datetime")]
+        [WitRequireEntity("location")]
+        [WitRequireEntity("datetime")]
         [WitMergeAll]
         public async Task GetForecast(IDialogContext context, IAwaitable<IMessageActivity> message, WitResult witResult)
         {

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Microsoft.Bot.Builder.Internals.Fibers;
 using Wit.Bot.Framework.Builder.Interfaces;
 
-namespace Wit.Bot.Framework.Builder
+namespace Wit.Bot.Framework.Builder.Attributes
 {
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, AllowMultiple = true)]
     [Serializable]
