@@ -15,16 +15,27 @@ namespace Wit.Bot.Framework.Builder.Sample.Dialogs
         [WitAction("greetings")]
         public async Task Greetings(IDialogContext context, IAwaitable<IMessageActivity> message, WitResult witResult)
         {
-            WitContext["user"] = (await message).From.Name;
+            var username = (await message).From.Name;
+
+            WitContext["user"] = username;
+
+            if (!context.PrivateConversationData.ContainsKey("user"))
+                context.PrivateConversationData.SetValue("user", username);
         }
 
         [WitAction("getForecast")]
         [WitRequireEntity("location")]
+        [WitLoadPrivateConversationData("location")]
         [WitRequireEntity("datetime")]
         [WitMergeAll]
-        public async Task GetForecast(IDialogContext context, IAwaitable<IMessageActivity> message, WitResult witResult)
+        public Task GetForecast(IDialogContext context, IAwaitable<IMessageActivity> message, WitResult witResult)
         {
+            if(!context.PrivateConversationData.ContainsKey("location"))
+                context.PrivateConversationData.SetValue("location", WitContext["location"]);
+
             WitContext["forecast"] = "sunny";
+
+            return Task.CompletedTask;
         }
 
         [WitAction("reset")]

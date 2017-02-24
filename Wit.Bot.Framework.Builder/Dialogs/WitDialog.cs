@@ -33,6 +33,13 @@ namespace Wit.Bot.Framework.Builder.Dialogs
 
         private bool _resetRequested;
 
+        public WitDialog()
+        {
+            Service = MakeServiceFromAttributes();
+
+            SetField.NotNull(out Service, nameof(Service), Service);
+        }
+
         public IWitService MakeServiceFromAttributes()
         {
             var witModels = GetType().GetCustomAttributes<WitModelAttribute>(true).ToArray();
@@ -43,16 +50,11 @@ namespace Wit.Bot.Framework.Builder.Dialogs
             return new WitService(witModels[0]);
         }
 
-        public WitDialog()
-        {
-            Service = MakeServiceFromAttributes();
-
-            SetField.NotNull(out Service, nameof(Service), Service);
-        }
-
-        public virtual async Task StartAsync(IDialogContext context)
+        public virtual Task StartAsync(IDialogContext context)
         {
             context.Wait(MessageReceived);
+
+            return Task.CompletedTask;
         }
 
         protected virtual async Task MessageReceived(IDialogContext context, IAwaitable<IMessageActivity> item)
@@ -69,7 +71,7 @@ namespace Wit.Bot.Framework.Builder.Dialogs
         private async Task MessageHandler(IDialogContext context, IAwaitable<IMessageActivity> item)
         {
             var message = await item;
-            var messageText = await GetWitQueryTextAsync(context, message);
+            var messageText = message.Text;
 
             while (true)
             {
@@ -139,7 +141,7 @@ namespace Wit.Bot.Framework.Builder.Dialogs
         protected virtual async Task DispatchToActionHandler(IDialogContext context, IAwaitable<IMessageActivity> item, WitResult result)
         {
             if (HandlerInfoByAction == null)
-                HandlerInfoByAction = new Dictionary<string, ActionActivityHandlerInfo>(GetHandlersInfoByAction());
+                HandlerInfoByAction = EnumerateHandlersInfo(this).ToDictionary(kv => kv.Key, kv => kv.Value);
 
             ActionActivityHandlerInfo handlerInfo;
 
@@ -148,35 +150,13 @@ namespace Wit.Bot.Framework.Builder.Dialogs
 
             if (handlerInfo != null)
             {
-                // check if action is tagged with WitReset attribute
-                if (handlerInfo.WitReset)
-                    _resetRequested = true;
+                CheckIfContextResetNecessary(handlerInfo);
 
-                // merge all or selected results to wit context
-                if ((handlerInfo.MergeAll || handlerInfo.WitMerges.Any()) && result.Entities != null)
-                {
-                    var entitiesToMerge = result.Entities.Where(e => e.Key != "intent" && (handlerInfo.MergeAll || handlerInfo.WitMerges.Select(s => s.Name).Contains(e.Key)));
+                MergeEntitiesIntoContext(handlerInfo, result);
 
-                    foreach (var entity in entitiesToMerge)
-                        WitContext[entity.Key] = entity.Value.FirstOrDefault()?.Value;
-                }
+                LoadDataFromPrivateConversationDataIntoContext(context, handlerInfo);
 
-                // check if all required entities are in context
-                var call = true;
-
-                foreach (var entity in handlerInfo.WitRequireEntities)
-                {
-                    if (!WitContext.ContainsKey(entity.Name))
-                    {
-                        WitContext[$"{entity.Name}Missing"] = true;
-
-                        call = false;
-
-                        break;
-                    }
-
-                    WitContext.Remove($"{entity.Name}Missing");
-                }
+                var call = CheckRequiredEntities(handlerInfo);
 
                 // ...and finally, when all entities are present in context - make a call
                 if (call)
@@ -186,20 +166,61 @@ namespace Wit.Bot.Framework.Builder.Dialogs
                 throw new System.Exception("No default action handler found.");
         }
 
-        protected virtual IDictionary<string, ActionActivityHandlerInfo> GetHandlersInfoByAction()
+        /// <summary>
+        /// Check if all required entities are in context already. Otherwise update context with information about missing entities.
+        /// </summary>
+        /// <param name="handlerInfo"></param>
+        /// <returns></returns>
+        private bool CheckRequiredEntities(ActionActivityHandlerInfo handlerInfo)
         {
-            return WitDialog.EnumerateHandlersInfo(this).ToDictionary(kv => kv.Key, kv => kv.Value);
+            var call = true;
+
+            foreach (var entity in handlerInfo.WitRequireEntities)
+            {
+                if (!WitContext.ContainsKey(entity.Name))
+                {
+                    WitContext[$"{entity.Name}Missing"] = true;
+
+                    call = false;
+
+                    break;
+                }
+
+                WitContext.Remove($"{entity.Name}Missing");
+            }
+            return call;
         }
 
-        protected virtual Task<string> GetWitQueryTextAsync(IDialogContext context, IMessageActivity message)
+        private void LoadDataFromPrivateConversationDataIntoContext(IDialogContext context, ActionActivityHandlerInfo handlerInfo)
         {
-            return Task.FromResult(message.Text);
+            foreach (var entity in handlerInfo.WitLoadPrivateConversationData)
+                if (!WitContext.ContainsKey(entity.Name) && context.PrivateConversationData.ContainsKey(entity.Name))
+                    WitContext[entity.Name] = context.PrivateConversationData.Get<object>(entity.Name);
         }
-    }
 
-    internal static class WitDialog
-    {
-        public static IEnumerable<KeyValuePair<string, ActionActivityHandlerInfo>> EnumerateHandlersInfo(object dialog)
+        /// <summary>
+        /// Merge all or selected wit result entities to wit context
+        /// </summary>
+        /// <param name="handlerInfo"></param>
+        /// <param name="result"></param>
+        private void MergeEntitiesIntoContext(ActionActivityHandlerInfo handlerInfo, WitResult result)
+        {
+            if ((!handlerInfo.MergeAll && !handlerInfo.WitMerges.Any()) || result.Entities == null)
+                return;
+
+            var entitiesToMerge = result.Entities.Where(e => e.Key != "intent" && (handlerInfo.MergeAll || handlerInfo.WitMerges.Select(s => s.Name).Contains(e.Key)));
+
+            foreach (var entity in entitiesToMerge)
+                WitContext[entity.Key] = entity.Value.FirstOrDefault()?.Value;
+        }
+
+        private void CheckIfContextResetNecessary(ActionActivityHandlerInfo handlerInfo)
+        {
+            if (handlerInfo.WitReset)
+                _resetRequested = true;
+        }
+
+        private static IEnumerable<KeyValuePair<string, ActionActivityHandlerInfo>> EnumerateHandlersInfo(object dialog)
         {
             var methods = dialog.GetType().GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
@@ -210,13 +231,15 @@ namespace Wit.Bot.Framework.Builder.Dialogs
                 var reset = method.GetCustomAttributes<WitResetAttribute>(true).Any();
                 var merges = method.GetCustomAttributes<WitMergeAttribute>(true).ToList();
                 var mergeAll = method.GetCustomAttributes<WitMergeAllAttribute>(true).Any();
-                
+                var loadPrivateConversationData = method.GetCustomAttributes<WitLoadPrivateConversationData>(true);
+
                 var handlerInfo = new ActionActivityHandlerInfo()
                 {
                     MergeAll = mergeAll,
                     WitMerges = merges.ToArray(),
                     WitReset = reset,
-                    WitRequireEntities = entities.ToArray()
+                    WitRequireEntities = entities.ToArray(),
+                    WitLoadPrivateConversationData = loadPrivateConversationData.ToArray()
                 };
 
                 ActionActivityHandler actionHandler = null;

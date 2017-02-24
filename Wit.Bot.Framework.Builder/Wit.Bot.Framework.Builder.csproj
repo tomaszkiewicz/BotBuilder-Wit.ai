@@ -89,6 +89,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Attributes\WitLoadPrivateConversationData.cs" />
     <Compile Include="Attributes\WitRequireEntityAttribute.cs" />
     <Compile Include="Attributes\WitMergeAllAttribute.cs" />
     <Compile Include="Attributes\WitMergeAttribute.cs" />

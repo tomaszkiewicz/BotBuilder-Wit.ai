@@ -9,5 +9,6 @@ namespace Wit.Bot.Framework.Builder.Handlers
         public bool WitReset { get; set; }
         public bool MergeAll { get; set; }
         public WitMergeAttribute[] WitMerges { get; set; }
+        public WitLoadPrivateConversationData[] WitLoadPrivateConversationData { get; set; }
     }
 }

@@ -4,6 +4,9 @@ using Microsoft.Bot.Builder.Scorables.Internals;
 
 namespace Wit.Bot.Framework.Builder.Attributes
 {
+    /// <summary>
+    /// This parameter specifies action name that gets invoked by wit.ai.
+    /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
     [Serializable]
     public class WitActionAttribute : AttributeString
