@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using Tomaszkiewicz.WitAi.Exceptions;
 
 namespace Tomaszkiewicz.WitAi.Console
 {
@@ -28,26 +29,50 @@ namespace Tomaszkiewicz.WitAi.Console
 
         static async Task Run()
         {
-            var dispatcher = new WitDispatcher("VZQQJVTB2E5DBMXL2RXSS73CX75H4ABO");
+            var baseColor = System.Console.ForegroundColor;
 
-            dispatcher.RegisterIntentHandler("greetings", new GreetingsHandler());
-            dispatcher.RegisterIntentHandler("weather", new WeatherHandler());
+            var persietence = new InMemoryWitPersistence();
+
+            System.Console.WriteLine("Ready to start a conversation - just type a message :)");
 
             while (true)
             {
+                var dispatcher = new WitDispatcher("VZQQJVTB2E5DBMXL2RXSS73CX75H4ABO", persietence);
+
+                dispatcher.SetDefaultHandler(new ConsoleHandler());
+                dispatcher.RegisterIntentHandler(new GreetingsHandler());
+                dispatcher.RegisterIntentHandler(new WeatherHandler());
+                dispatcher.RegisterIntentHandler(new ThanksHandler());
+
                 var text = System.Console.ReadLine()?.Trim();
 
-                if (text == null)
+                if (string.IsNullOrWhiteSpace(text))
                     continue;
 
                 if (text == "exit")
                     break;
 
+                System.Console.ForegroundColor = ConsoleColor.DarkYellow;
                 System.Console.WriteLine($"> {text}");
+                System.Console.ForegroundColor = baseColor;
 
-                await dispatcher.Dispatch(text);
-
-                System.Console.WriteLine("Dispatch completed.");
+                try
+                {
+                    await dispatcher.Dispatch(text);
+                }
+                catch (NoIntentDetectedException)
+                {
+                    System.Console.ForegroundColor = ConsoleColor.Red;
+                    System.Console.WriteLine("< No intent detected.");
+                    System.Console.ForegroundColor = baseColor;
+                }
+                catch (Exception ex)
+                {
+                    System.Console.ForegroundColor = ConsoleColor.DarkRed;
+                    System.Console.WriteLine(ex.Message);
+                    System.Console.WriteLine(ex.StackTrace);
+                    System.Console.ForegroundColor = baseColor;
+                }
             }
         }
     }

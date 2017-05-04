@@ -3,17 +3,19 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Tomaszkiewicz.WitAi.Attributes;
+using Tomaszkiewicz.WitAi.Exceptions;
 using Tomaszkiewicz.WitAi.Handlers;
+using Tomaszkiewicz.WitAi.Interfaces;
 
 namespace Tomaszkiewicz.WitAi
 {
     internal class IntentHandlerInfo
     {
-        public IIntentHandler Handler { get; }
+        public IDefaultIntentHandler Handler { get; }
 
         readonly Dictionary<string, ActionHandlerInfo> _actionHandlers;
 
-        public IntentHandlerInfo(IIntentHandler handler)
+        public IntentHandlerInfo(IDefaultIntentHandler handler)
         {
             Handler = handler;
 
@@ -22,6 +24,9 @@ namespace Tomaszkiewicz.WitAi
 
         public ActionHandlerInfo GetActionHandler(string action)
         {
+            if (!_actionHandlers.ContainsKey(action))
+                throw new NoActionHandlerException($"No handler for action \"{action}\" in intent handler {Handler.GetType().FullName}.");
+
             return _actionHandlers[action];
         }
 

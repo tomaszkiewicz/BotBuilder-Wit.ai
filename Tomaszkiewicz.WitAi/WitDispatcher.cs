@@ -4,58 +4,104 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Tomaszkiewicz.WitAi.Exceptions;
 using Tomaszkiewicz.WitAi.Handlers;
+using Tomaszkiewicz.WitAi.Interfaces;
 
 namespace Tomaszkiewicz.WitAi
 {
     public class WitDispatcher
     {
+        private readonly IWitPersistence _persistence;
         private readonly WitService _service;
         private readonly Dictionary<string, IntentHandlerInfo> _intentHandlers = new Dictionary<string, IntentHandlerInfo>();
-        private bool _resetRequested;
-        private Dictionary<string, object> _witContext = new Dictionary<string, object>();
-        private string _sessionId;
 
-        public WitDispatcher(string authToken)
+        public WitDispatcher(string authToken, IWitPersistence persistence)
         {
+            _persistence = persistence;
             _service = new WitService(authToken);
-
-            ResetConversation();
         }
 
-        public void RegisterIntentHandler(string intent, IIntentHandler handler)
+        public void SetDefaultHandler(IDefaultIntentHandler handler)
         {
+            _intentHandlers[""] = new IntentHandlerInfo(handler);
+        }
+
+        public void RegisterIntentHandler(IIntentHandler handler)
+        {
+            if (_intentHandlers.ContainsKey(handler.Intent))
+                throw new WitDispatcherException($"There is already a handler registered for intent {handler.Intent}");
+
             var handlerInfo = new IntentHandlerInfo(handler);
 
-            _intentHandlers[intent] = handlerInfo;
+            _intentHandlers[handler.Intent] = handlerInfo;
         }
 
         public async Task Dispatch(string query)
         {
             while (true)
             {
-                var serializedContext = JsonConvert.SerializeObject(_witContext);
+                var witContext = await _persistence.GetWitContext();
+                var sessionId = await _persistence.GetSessionId();
+                var intent = await _persistence.GetIntent();
+                var resetRequested = await _persistence.GetResetRequested();
 
-                Debug.WriteLine("******************************************************************************");
-                Debug.WriteLine($"Session Id: {_sessionId}");
-                Debug.WriteLine($"Message: {query}");
-                Debug.WriteLine("Context:");
-                Debug.WriteLine(serializedContext);
+                if (witContext == null && sessionId == null)
+                {
+                    await ResetConversation();
+                    continue;
+                }
 
-                var result = await _service.QueryAsync(query, _sessionId, serializedContext);
+                var serializedContext = JsonConvert.SerializeObject(witContext);
 
-                Debug.WriteLine("Result:");
-                Debug.WriteLine(JsonConvert.SerializeObject(result));
+                DebugDisplayOutgoing(query, witContext, sessionId);
 
-                var intent = result.Entities.First(x => x.Key == "intent").Value.First().Value;
-                
+                var result = await _service.QueryAsync(query, sessionId, serializedContext);
+
+                query = null;
+
+                if (result.Entities != null && result.Entities.Any(x => x.Key == "intent"))
+                {
+                    var currentIntent = result.Entities.First(x => x.Key == "intent").Value.First().Value;
+
+                    if (!string.IsNullOrWhiteSpace(currentIntent))
+                    {
+                        intent = currentIntent;
+                        await _persistence.SetIntent(currentIntent);
+                    }
+                }
+
+                DebugDisplayIncoming(intent, result);
+
+                if (intent == null && !_intentHandlers.ContainsKey(""))
+                    throw new NoIntentDetectedException();
+
+                if (intent == null)
+                {
+                    intent = "";
+                    await _persistence.SetIntent("");
+                }
+
+                if (!_intentHandlers.ContainsKey(intent))
+                {
+                    if (result.Type == "action")
+                    {
+                        await _persistence.SetResetRequested(true);
+
+                        throw new WitDispatcherException($"No handler registered for intent \"{intent}\"");
+                    }
+
+                    intent = "";
+                    await _persistence.SetIntent("");
+                }
+
                 var intentHandlerInfo = _intentHandlers[intent];
 
                 switch (result.Type)
                 {
                     case "action":
                         Debug.WriteLine($"ACTION {result.Action}");
-                        await DispatchToActionHandler(intentHandlerInfo, result);
+                        await DispatchToActionHandler(intentHandlerInfo, result, witContext);
                         continue;
 
                     case "msg":
@@ -71,10 +117,14 @@ namespace Tomaszkiewicz.WitAi
                     case "stop":
                         Debug.WriteLine("STOP");
 
-                        if (_resetRequested)
-                            await ResetConversation();
+                        if (resetRequested)
+                        {
+                            await _persistence.SetIntent(null);
 
-                        _resetRequested = false;
+                            await ResetConversation();
+                        }
+
+                        await _persistence.SetResetRequested(false);
 
                         return;
 
@@ -84,52 +134,101 @@ namespace Tomaszkiewicz.WitAi
             }
         }
 
-        private Task ResetConversation()
+        private static void DebugDisplayIncoming(string intent, WitResult result)
+        {
+            Debug.WriteLine("*************************** INCOMING *******************************");
+            Debug.WriteLine($"Intent: {intent}");
+
+            if (!string.IsNullOrWhiteSpace(result.Action))
+                Debug.WriteLine($"Action: {result.Action}");
+
+            if (!string.IsNullOrWhiteSpace(result.Message))
+                Debug.WriteLine($"Message: {result.Message}");
+
+            if (result.QuickReplies != null && result.QuickReplies.Any())
+                Debug.WriteLine($"Quick replies: {string.Join(", ", result.QuickReplies)}");
+
+            if (result.Entities != null && result.Entities.Any(x => x.Key != "intent"))
+            {
+                Debug.WriteLine("Entities:");
+
+                foreach (var entity in result.Entities.Where(x => x.Key != "intent"))
+                    Debug.WriteLine($"\t{entity.Key}: {entity.Value.First().Value}");
+            }
+
+            //Debug.WriteLine(JsonConvert.SerializeObject(result));
+            //Debug.WriteLine("********************************************************************");
+        }
+
+        private void DebugDisplayOutgoing(string query, WitContext witContext, string sessionId)
+        {
+            Debug.WriteLine("*************************** OUTGOING *******************************");
+            Debug.WriteLine($"Session Id: {sessionId}");
+
+            if (!string.IsNullOrWhiteSpace(query))
+                Debug.WriteLine($"Message: {query}");
+
+            if (witContext.Any())
+            {
+                Debug.WriteLine("Context: ");
+
+                foreach (var kvp in witContext)
+                    Debug.WriteLine($"\t{kvp.Key}: {kvp.Value}");
+            }
+            //Debug.WriteLine("********************************************************************");
+        }
+
+        private async Task ResetConversation()
         {
             Debug.WriteLine("RESET");
 
-            _sessionId = Guid.NewGuid().ToString();
-            _witContext = new Dictionary<string, object>();
-
-            return Task.CompletedTask;
+            await _persistence.SetSessionId(Guid.NewGuid().ToString());
+            await _persistence.SetWitContext(new WitContext());
         }
 
-        private async Task DispatchToActionHandler(IntentHandlerInfo intentHandlerInfo, WitResult result)
+        private async Task DispatchToActionHandler(IntentHandlerInfo intentHandlerInfo, WitResult result, WitContext witContext)
         {
-            var actionHandlerInfo = intentHandlerInfo.GetActionHandler(result.Action);
+            ActionHandlerInfo actionHandlerInfo;
 
-            if (actionHandlerInfo != null)
+            try
             {
-                CheckIfContextResetNecessary(actionHandlerInfo);
-
-                MergeEntitiesIntoContext(actionHandlerInfo, result);
-
-                LoadDataFromPrivateConversationDataIntoContext(actionHandlerInfo);
-
-                var call = CheckRequiredEntities(actionHandlerInfo);
-
-                // ...and finally, when all entities are present in context - make a call
-                if (call)
-                {
-                    bool requestReset = false;
-
-                    await actionHandlerInfo.Handler(_witContext, result, ref requestReset);
-
-                    if (requestReset)
-                        _resetRequested = true;
-                }
+                actionHandlerInfo = intentHandlerInfo.GetActionHandler(result.Action);
             }
-            else
-                throw new Exception("No default action handler found.");
+            catch (NoActionHandlerException)
+            {
+                await _persistence.SetResetRequested(true);
+
+                throw;
+            }
+
+            await CheckIfContextResetNecessary(actionHandlerInfo);
+
+            MergeEntitiesIntoContext(actionHandlerInfo, result, witContext);
+
+            await LoadDataFromPrivateConversationDataIntoContext(actionHandlerInfo, witContext);
+
+            var call = CheckRequiredEntities(actionHandlerInfo, witContext);
+
+            // ...and finally, when all entities are present in context - make a call
+            if (call)
+            {
+                var requestReset = await actionHandlerInfo.Handler(witContext, result, _persistence);
+
+                if (requestReset)
+                    await _persistence.SetResetRequested(true);
+            }
+
+            await _persistence.SetWitContext(witContext);
         }
 
-        private void LoadDataFromPrivateConversationDataIntoContext(ActionHandlerInfo handlerInfo)
+        private async Task LoadDataFromPrivateConversationDataIntoContext(ActionHandlerInfo handlerInfo, WitContext witContext)
         {
-            // TODO
-
-            //foreach (var entity in handlerInfo.WitLoadPrivateConversationData)
-            //    if (!WitContext.ContainsKey(entity.Name) && context.PrivateConversationData.ContainsKey(entity.Name))
-            //        WitContext[entity.Name] = context.PrivateConversationData.Get<object>(entity.Name);
+            foreach (var entity in handlerInfo.WitLoadPrivateConversationData)
+            {
+                object data;
+                if (!witContext.ContainsKey(entity.Name) && await _persistence.TryGetPrivateConversationData(entity.Name, out data))
+                    witContext[entity.Name] = data;
+            }
         }
 
         /// <summary>
@@ -137,7 +236,8 @@ namespace Tomaszkiewicz.WitAi
         /// </summary>
         /// <param name="handlerInfo"></param>
         /// <param name="result"></param>
-        private void MergeEntitiesIntoContext(ActionHandlerInfo handlerInfo, WitResult result)
+        /// <param name="witContext"></param>
+        private void MergeEntitiesIntoContext(ActionHandlerInfo handlerInfo, WitResult result, WitContext witContext)
         {
             if ((!handlerInfo.MergeAll && !handlerInfo.WitMerges.Any()) || result.Entities == null)
                 return;
@@ -145,36 +245,38 @@ namespace Tomaszkiewicz.WitAi
             var entitiesToMerge = result.Entities.Where(e => e.Key != "intent" && (handlerInfo.MergeAll || handlerInfo.WitMerges.Select(s => s.Name).Contains(e.Key)));
 
             foreach (var entity in entitiesToMerge)
-                _witContext[entity.Key] = entity.Value.FirstOrDefault()?.Value;
+                witContext[entity.Key] = entity.Value.FirstOrDefault()?.Value;
         }
 
-        private void CheckIfContextResetNecessary(ActionHandlerInfo handlerInfo)
+        private async Task CheckIfContextResetNecessary(ActionHandlerInfo handlerInfo)
         {
             if (handlerInfo.WitReset)
-                _resetRequested = true;
+                await _persistence.SetResetRequested(true);
+
         }
 
         /// <summary>
         /// Check if all required entities are in context already. Otherwise update context with information about missing entities.
         /// </summary>
         /// <param name="handlerInfo"></param>
+        /// <param name="witContext"></param>
         /// <returns></returns>
-        private bool CheckRequiredEntities(ActionHandlerInfo handlerInfo)
+        private bool CheckRequiredEntities(ActionHandlerInfo handlerInfo, WitContext witContext)
         {
             var call = true;
 
             foreach (var entity in handlerInfo.WitRequireEntities)
             {
-                if (!_witContext.ContainsKey(entity.Name))
+                if (!witContext.ContainsKey(entity.Name))
                 {
-                    _witContext[$"{entity.Name}Missing"] = true;
+                    witContext[$"{entity.Name}Missing"] = true;
 
                     call = false;
 
                     break;
                 }
 
-                _witContext.Remove($"{entity.Name}Missing");
+                witContext.Remove($"{entity.Name}Missing");
             }
             return call;
         }
