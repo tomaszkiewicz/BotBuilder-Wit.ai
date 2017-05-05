@@ -31,31 +31,32 @@ namespace Tomaszkiewicz.WitAi.Console
         {
             var baseColor = System.Console.ForegroundColor;
 
-            var persietence = new InMemoryWitPersistence();
+            var persistence = new InMemoryWitPersistence();
 
             System.Console.WriteLine("Ready to start a conversation - just type a message :)");
 
             while (true)
             {
-                var dispatcher = new WitDispatcher("VZQQJVTB2E5DBMXL2RXSS73CX75H4ABO", persietence);
+                var dispatcher = new WitDispatcher("VZQQJVTB2E5DBMXL2RXSS73CX75H4ABO", persistence);
 
                 dispatcher.SetDefaultHandler(new ConsoleHandler());
                 dispatcher.RegisterIntentHandler(new GreetingsHandler());
                 dispatcher.RegisterIntentHandler(new WeatherHandler());
                 dispatcher.RegisterIntentHandler(new ThanksHandler());
 
+                System.Console.ForegroundColor = ConsoleColor.Magenta;
+                System.Console.Write("> ");
+
                 var text = System.Console.ReadLine()?.Trim();
+
+                System.Console.ForegroundColor = baseColor;
 
                 if (string.IsNullOrWhiteSpace(text))
                     continue;
 
                 if (text == "exit")
                     break;
-
-                System.Console.ForegroundColor = ConsoleColor.DarkYellow;
-                System.Console.WriteLine($"> {text}");
-                System.Console.ForegroundColor = baseColor;
-
+                
                 try
                 {
                     await dispatcher.Dispatch(text);

@@ -54,7 +54,7 @@ namespace Tomaszkiewicz.WitAi
             _witContext = witContext;
             return Task.CompletedTask;
         }
-
+        
         public Task<bool> TryGetPrivateConversationData(string name, out object data)
         {
             return Task.FromResult(_privateData.TryGetValue(name, out data));

@@ -57,19 +57,28 @@ namespace Tomaszkiewicz.WitAi
                 DebugDisplayOutgoing(query, witContext, sessionId);
 
                 var result = await _service.QueryAsync(query, sessionId, serializedContext);
-
-                query = null;
-
+                
                 if (result.Entities != null && result.Entities.Any(x => x.Key == "intent"))
                 {
                     var currentIntent = result.Entities.First(x => x.Key == "intent").Value.First().Value;
 
                     if (!string.IsNullOrWhiteSpace(currentIntent))
                     {
-                        intent = currentIntent;
                         await _persistence.SetIntent(currentIntent);
+
+                        if (currentIntent != intent && !string.IsNullOrWhiteSpace(intent))
+                        {
+                            Debug.WriteLine($"Intent changed from {intent} to {currentIntent}, resetting conversation and querying again.");
+                            await ResetConversation();
+
+                            continue;
+                        }
+
+                        intent = currentIntent;
                     }
                 }
+                
+                query = null;
 
                 DebugDisplayIncoming(intent, result);
 
@@ -93,6 +102,7 @@ namespace Tomaszkiewicz.WitAi
 
                     intent = "";
                     await _persistence.SetIntent("");
+                    
                 }
 
                 var intentHandlerInfo = _intentHandlers[intent];
@@ -120,7 +130,6 @@ namespace Tomaszkiewicz.WitAi
                         if (resetRequested)
                         {
                             await _persistence.SetIntent(null);
-
                             await ResetConversation();
                         }
 

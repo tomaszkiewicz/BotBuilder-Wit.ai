@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tomaszkiewicz.WitAi", "Toma
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tomaszkiewicz.WitAi.Console", "Tomaszkiewicz.WitAi.Console\Tomaszkiewicz.WitAi.Console.csproj", "{CE6858EA-4A90-4224-A446-07E828705FFC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tomaszkiewicz.WitAi.SampleBot", "Tomaszkiewicz.WitAi.SampleBot\Tomaszkiewicz.WitAi.SampleBot.csproj", "{9210A433-CC99-42DF-88C0-BDA9F433ACD2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{CE6858EA-4A90-4224-A446-07E828705FFC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CE6858EA-4A90-4224-A446-07E828705FFC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CE6858EA-4A90-4224-A446-07E828705FFC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9210A433-CC99-42DF-88C0-BDA9F433ACD2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9210A433-CC99-42DF-88C0-BDA9F433ACD2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9210A433-CC99-42DF-88C0-BDA9F433ACD2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9210A433-CC99-42DF-88C0-BDA9F433ACD2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,12 +1,17 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Bot.Connector;
 using Tomaszkiewicz.WitAi.Attributes;
 using Tomaszkiewicz.WitAi.Interfaces;
 
-namespace Tomaszkiewicz.WitAi.Console
+namespace Tomaszkiewicz.WitAi.SampleBot.Handlers
 {
-    internal class WeatherHandler : ConsoleHandler, IIntentHandler
+    internal class WeatherHandler : DefaultBotHandler, IIntentHandler
     {
+        public WeatherHandler(Activity activity) : base(activity)
+        {
+        }
+
         [WitAction("getForecast")]
         [WitRequireEntity("location")]
         [WitLoadPrivateConversationData("location")]
