@@ -17,16 +17,14 @@ namespace Tomaszkiewicz.WitAi.SampleBot.Controllers
             {
                 if (activity.Type == ActivityTypes.Message)
                 {
-                    var stateClient = activity.GetStateClient();
-                    var botData = await stateClient.BotState.GetPrivateConversationDataAsync(activity.ChannelId, activity.Conversation.Id, activity.From.Id);
-
+                    var botData = await BotStateServicePersistence.GetBotData(activity);
                     var persistence = new BotStateServicePersistence(botData);
 
                     var dispatcher = CreateDispatcher(activity, persistence);
 
                     await dispatcher.Dispatch(activity.Text);
 
-                    await stateClient.BotState.SetPrivateConversationDataAsync(activity.ChannelId, activity.Conversation.Id, activity.From.Id, botData);
+                    await BotStateServicePersistence.SaveBotData(activity, botData);
                 }
                 else
                 {

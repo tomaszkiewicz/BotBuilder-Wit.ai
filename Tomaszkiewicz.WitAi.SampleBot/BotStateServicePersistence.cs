@@ -7,6 +7,16 @@ namespace Tomaszkiewicz.WitAi.SampleBot
     {
         private readonly BotData _botData;
 
+        public static Task<BotData> GetBotData(Activity activity)
+        {
+            return activity.GetStateClient().BotState.GetPrivateConversationDataAsync(activity.ChannelId, activity.Conversation.Id, activity.From.Id);
+        }
+
+        public static Task SaveBotData(Activity activity, BotData botData)
+        {
+            return activity.GetStateClient().BotState.SetPrivateConversationDataAsync(activity.ChannelId, activity.Conversation.Id, activity.From.Id, botData);
+        }
+
         public BotStateServicePersistence(BotData botData)
         {
             _botData = botData;
